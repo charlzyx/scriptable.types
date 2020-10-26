@@ -1,39 +1,72 @@
 const puppeteer = require('puppeteer');
 const fs = require('fs');
-const { exec } = require('child_process');
 
 const typeConvert = (code) => {
   const ans = code
+   // \n -> ;
   .replace(/\n/, ';')
+   // Promise<[number]> -> Promise<number[]>
   .replace(/\[(.*)\]/g, m => {
-    // 格式转换 Promise<[number]> -> Promise<number[]>
     const c = m.replace(/\[/, '').replace(/\]/, '')
     return c+'[]'
   })
-  .replace('fn()', '() => void').replace(/fn\(.*\)/, m => {
-    const c = m.replace('fn', '')
-    return c + '=> void'
-  })
+  // fn() -> () => void
+  .replace(': fn(', ' fn(')
+  .replace('fn(string)', '(str: string)')
+  .replace('fn(string, {string: string})', '(msg: string, info: Record<string, string>)')
+  .replace('fn(number)', '(selected: number)')
+  // fn(....) => (....) => void
+  .replace('fn(Request) ->', '(req: Request): ')
+  .replace('fn()', '()')
+  // bool -> boolean
   .replace('bool', 'boolean')
+  .replace('{string: string}', 'Record<string, string>')
+  .replace('{string: number}', 'Record<string, number>')
+  .replace('{string: any}', 'Record<string, any>')
+  // new Xxxxx(...) -> (...) => void
+  .replace(/new\s.*\(/, m => {
+    return 'constructor(';
+  })
+  .replace('Promise;', 'Promise<void>')
   return `  ${ans}`
 }
 
 const jsonToTs = (json) => {
-  const isClazz = /^[A-Z]/.test(json.name);
+  const isClazz = /^[A-Z]/.test(json.name) || json.name === 'console';
   let prefix = '';
   if (isClazz) {
-    prefix = `interface ${json.name} {`
+    prefix = `class ${json.name} {`
   } else {
     prefix = `type ${json.name} = {`
   }
   let lines = [prefix];
   json.fields.forEach(p => {
     lines.push(`/** ${p.desc} */`)
+
     lines.push(typeConvert(p.code));
+    // if (isClazz) {
+    //   lines.push(typeConvert(p.code).replace(/\w+:/, m => m.replace(/\:$/, '!:')));
+    // } else {
+    //   lines.push(typeConvert(p.code));
+    // }
   })
   json.methods.forEach(p => {
     lines.push(`/** ${p.desc} */`)
     lines.push(typeConvert(p.code));
+    // const code = typeConvert(p.code);
+    // const hasReturnType = /\):/.test(code);
+    // if (!hasReturnType) {
+      // lines.push(code.replace(/\;$/, ';'))
+    // } else {
+      // lines.push(code)
+      // const [pre, returntype] = code.split('):');
+      // lines.push(pre + ') {' + 'return null as' + returntype + '};')
+    // }
+    // const [pre, returntype] = code.split('):');
+    // console.log('pre, returntype', code.split('):'), pre, returntype)
+    // lines.push(`${pre} ${returntype ? `{ return null as ${returntype}}`: {}}`)
+    // // lines.push(typeConvert(p.code));
+
   })
   lines.push('}')
   lines.unshift(
@@ -41,12 +74,12 @@ const jsonToTs = (json) => {
   ${json.desc}
 ---------${json.name} --------
 */`)
-  fs.writeFileSync('./api/' + json.name + '.ts', lines.join('\n'));
+  fs.writeFileSync('./typings/' + json.name + '.d.ts', lines.join('\n'));
 };
 
 (async () => {
   const browser = await puppeteer.launch({
-    args: [ '--proxy-server=http://127.0.0.1:7890' ],
+    // args: [ '--proxy-server=http://127.0.0.1:7890' ],
     defaultViewport: { width: 1600, height: 1600 },
     // headless: false
   });
@@ -60,7 +93,9 @@ const jsonToTs = (json) => {
     // 移除第一个 Script Docs 大标题
     list.shift();
 
-    return list.map(x => x.innerText).filter(x => !/\s+/.test(x));
+    return list.map(x => x.innerText)
+    .filter(x => x === 'XMLParser')
+    .filter(x => !/\s+/.test(x));
   });
   console.log('apiNames', apiNames)
 
@@ -79,7 +114,16 @@ const jsonToTs = (json) => {
           return el.tagName.toLowerCase() === tagName.toLowerCase();
         },
         isCode: (el) => {
-          return el.getAttribute('class') === 'codehilite';
+          return el.getAttribute('class') === 'codehilite' && el.innerText.split('\n').length <= 2;
+        },
+        yankCode: (els) => {
+          const idx = els.findIndex(x => helper.isCode(x));
+          let code = '';
+          if (idx > -1) {
+            const found = els.splice(idx, 1);
+            code = found[0];
+          }
+          return code ? code : { innerText: '' };
         },
         splitBy: (arr, fn) => {
           return arr.reduce((result, cur, index) => {
@@ -105,7 +149,7 @@ const jsonToTs = (json) => {
               break;
               // 其他都解析到说明里
             } else {
-              doc.desc += text;
+              doc.desc += text + '\n';
             }
           }
           //将剩下的元素返回
@@ -149,15 +193,15 @@ const jsonToTs = (json) => {
             }
           }
 
-          // 这时候第一位(反向的就是 code 了
-          prop.code = els.shift().innerText;
+          // 抽取 code 内容了
+          prop.code = helper.yankCode(els).innerText;
           // 顺序反转回来, 剩下的都是注释
           els.reverse();
           // 倒解析的参数也反转回来
           fnDesc.reverse();
-          prop.desc += els.map(x => x.innerText).join('');
-          prop.desc += fnDesc.join('');
-          // 根据类型注释中是否有括号来判断是不是方法
+          prop.desc += els.map(x => x.innerText).join('\n');
+          prop.desc += fnDesc.join('\n');
+          // 根据类型注释中是否有括号和是否包含 fn来判断是不是方法
           prop.isMethod = /\(/.test(prop.code);
           return prop;
         },
