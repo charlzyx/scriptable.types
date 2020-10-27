@@ -1,5 +1,5 @@
 {
-  "name": "scriptable",
+  "name": "scriptable.types",
   "version": "1.0.0",
   "description": "",
   "main": "index.js",
@@ -10,9 +10,7 @@
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "dependencies": {
+  "peerDependencies": {
     "puppeteer": "^5.4.0"
-  },
-  "devDependencies": {
   }
 }
