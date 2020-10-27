@@ -1,11 +1,11 @@
 {
   "name": "scriptable.types",
-  "version": "1.0.0",
+  "version": "1.3.0",
   "description": "",
   "main": "index.js",
   "types": "./typings",
   "scripts": {
-    "gen": "node index.js"
+    "gen": "node gentypes.js"
   },
   "keywords": [],
   "author": "",
