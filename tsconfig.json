@@ -1,6 +1,8 @@
 {
   "compilerOptions": {
-    "lib": ["ES2015"],
-    "typeRoots": ["./typings/**.d.ts"],
+    "lib": ["es6"],
+    "typeRoots": ["./typings"],
+    "allowJs": true,
+    "noImplicitAny": false
   }
 }
