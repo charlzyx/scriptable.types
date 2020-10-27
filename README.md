@@ -4,6 +4,9 @@
 
 接口文档是从 [https://docs.scriptable.app/](https://docs.scriptable.app/) 这里爬虫爬出来的,不一定及时更新
 
+# 如何更新?
+`yarn add puppeteer && yarn gen`
+
 # 食用指南
 
 - 首先请克隆本仓库 `git clone git@github.com:charlzyx/scriptable.types.git`
